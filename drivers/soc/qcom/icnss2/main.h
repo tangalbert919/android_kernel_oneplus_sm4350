@@ -116,6 +116,7 @@ enum icnss_driver_state {
 	ICNSS_PDR,
 	ICNSS_DEL_SERVER,
 	ICNSS_COLD_BOOT_CAL,
+	ICNSS_QMI_DMS_CONNECTED,
 };
 
 struct ce_irq_list {
@@ -325,6 +326,12 @@ struct smp2p_out_info {
 	struct qcom_smem_state *smem_state;
 };
 
+struct icnss_dms_data {
+	u8 mac_valid;
+	u8 nv_mac_not_prov;
+	u8 mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
+};
+
 struct icnss_priv {
 	uint32_t magic;
 	struct platform_device *pdev;
@@ -351,6 +358,7 @@ struct icnss_priv {
 	dma_addr_t smmu_iova_ipa_current;
 	size_t smmu_iova_ipa_len;
 	struct qmi_handle qmi;
+	struct qmi_handle qmi_dms;
 	struct list_head event_list;
 	struct list_head soc_wake_msg_list;
 	spinlock_t event_lock;
@@ -432,6 +440,8 @@ struct icnss_priv {
 	struct mutex tcdev_lock;
 	bool is_chain1_supported;
 	bool chain_reg_info_updated;
+	struct icnss_dms_data dms;
+	u8 use_nv_mac;
 };
 
 struct icnss_reg_info {
