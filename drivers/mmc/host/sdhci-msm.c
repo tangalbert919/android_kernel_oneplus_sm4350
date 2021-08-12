@@ -4428,6 +4428,17 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		goto pm_runtime_disable;
 	sdhci_msm_set_regulator_caps(msm_host);
 
+<<<<<<< HEAD
+=======
+	/*
+	 * Ensure larger discard size by setting max_busy_timeout.
+	 * This has to set only after sdhci_add_host so that our
+	 * value won't be over-written.
+	 */
+#ifndef CONFIG_ARCH_HOLI
+	host->mmc->max_busy_timeout = 0;
+#endif
+>>>>>>> dd19c08bb71a (Synchronize codes for OnePlus Nord N200 Oxygen 11.0.1.5.DE18CB and OnePlus Nord N200 Oxygen 11.0.2.0.DE17AA)
 #if defined(CONFIG_SDC_QTI)
 	sdhci_msm_init_sysfs(pdev);
 #endif
