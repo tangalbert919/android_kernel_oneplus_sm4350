@@ -25,7 +25,11 @@
 #include <linux/ioctl.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/dma-mapping.h>
+
+#include <linux/pinctrl/devinfo.h>
+
 #include <uapi/linux/msm_geni_serial.h>
+
 
 /* UART specific GENI registers */
 #define SE_UART_LOOPBACK_CFG		(0x22C)
@@ -124,7 +128,6 @@
 #define M_IRQ_BITS		(M_RX_FIFO_WATERMARK_EN | M_RX_FIFO_LAST_EN |\
 				M_CMD_CANCEL_EN | M_CMD_ABORT_EN |\
 				M_IO_DATA_ASSERT_EN | M_IO_DATA_DEASSERT_EN)
-
 #define S_IRQ_BITS		(S_RX_FIFO_WATERMARK_EN | S_RX_FIFO_LAST_EN |\
 				S_CMD_CANCEL_EN | S_CMD_ABORT_EN)
 #define DMA_TX_IRQ_BITS		(TX_RESET_DONE | TX_DMA_DONE |\
@@ -234,6 +237,28 @@ static int uart_line_id;
 
 #define GET_DEV_PORT(uport) \
 	container_of(uport, struct msm_geni_serial_port, uport)
+
+#ifdef CONFIG_QGKI
+struct oemconsole {
+	bool default_console;
+	bool console_initialized;
+};
+
+static struct oemconsole oem_console  = {
+	.default_console       = false,
+	.console_initialized   = false,
+};
+
+static int __init parse_console_config(char *str)
+{	pr_err("%s: *akash\n", __func__);
+	if (str == NULL)
+		return 0;
+	if (!strcmp(str, "ttyMSM0,115200n8"))
+		oem_console.default_console = true;
+	return 0;
+}
+early_param("console", parse_console_config);
+#endif
 
 static struct msm_geni_serial_port msm_geni_console_port;
 static struct msm_geni_serial_port msm_geni_serial_ports[GENI_UART_NR_PORTS];
@@ -1424,7 +1449,8 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	unsigned long flags = 0;
 	bool is_rx_active;
 	unsigned int stale_delay;
-	u32 dma_rx_status, s_irq_status;
+    u32 dma_rx_status, s_irq_status;
+    int usage_count;
 
 	IPC_LOG_MSG(port->ipc_log_misc, "%s\n", __func__);
 
@@ -1450,24 +1476,32 @@ static int stop_rx_sequencer(struct uart_port *uport)
 		stale_delay = (2 * stale_delay) + SYSTEM_DELAY;
 		udelay(stale_delay);
 
-		dma_rx_status = geni_read_reg_nolog(uport->membase,
-						SE_DMA_RX_IRQ_STAT);
-		/* The transfer is completed at HW level and the completion
-		 * interrupt is delayed. So process the transfer completion
-		 * before issuing the cancel command to resolve the race
-		 * btw cancel RX and completion interrupt.
-		 */
-		if (dma_rx_status) {
-			s_irq_status = geni_read_reg_nolog(uport->membase,
-							SE_GENI_S_IRQ_STATUS);
-			geni_write_reg_nolog(s_irq_status, uport->membase,
-							SE_GENI_S_IRQ_CLEAR);
-			geni_se_dump_dbg_regs(&port->serial_rsc,
-				uport->membase, port->ipc_log_misc);
-			IPC_LOG_MSG(port->ipc_log_misc, "%s: Interrupt delay\n",
-					__func__);
-			handle_rx_dma_xfer(s_irq_status, uport);
-		}
+        dma_rx_status = geni_read_reg_nolog(uport->membase,
+                        SE_DMA_RX_IRQ_STAT);
+        /* The transfer is completed at HW level and the completion
+         * interrupt is delayed. So process the transfer completion
+         * before issuing the cancel command to resolve the race
+         * btw cancel RX and completion interrupt.
+         */
+        if (dma_rx_status) {
+            s_irq_status = geni_read_reg_nolog(uport->membase,
+                            SE_GENI_S_IRQ_STATUS);
+            geni_write_reg_nolog(s_irq_status, uport->membase,
+                            SE_GENI_S_IRQ_CLEAR);
+            geni_se_dump_dbg_regs(&port->serial_rsc,
+                uport->membase, port->ipc_log_misc);
+            IPC_LOG_MSG(port->ipc_log_misc, "%s: Interrupt delay\n",
+                    __func__);
+            handle_rx_dma_xfer(s_irq_status, uport);
+			if (!port->ioctl_count) {
+				usage_count = atomic_read(&uport->dev->power.usage_count);
+				IPC_LOG_MSG(port->ipc_log_misc,
+					"%s: Abort Stop Rx, extend the PM timer, usage_count:%d\n",
+					__func__, usage_count);
+				pm_runtime_mark_last_busy(uport->dev);
+				return -EBUSY;
+			}
+        }
 	}
 
 	IPC_LOG_MSG(port->ipc_log_misc, "%s: Start 0x%x\n",
@@ -2235,7 +2269,6 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 			disable_irq(msm_port->wakeup_irq);
 			free_irq(msm_port->wakeup_irq, uport);
 		}
-
 		if (!IS_ERR_OR_NULL(msm_port->serial_rsc.geni_gpio_shutdown)) {
 			ret = pinctrl_select_state(msm_port->serial_rsc.geni_pinctrl,
 						msm_port->serial_rsc.geni_gpio_shutdown);
@@ -3178,6 +3211,13 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	}
 
 	is_console = (drv->cons ? true : false);
+#ifdef CONFIG_QGKI
+	if (!oem_console.default_console && is_console) {
+		dev_err(&pdev->dev, "%s:return fake success\n", __func__);
+		devm_pinctrl_put(pdev->dev.pins->p);
+		return 0;
+	}
+#endif
 	dev_port = get_port_from_line(line, is_console);
 	if (IS_ERR_OR_NULL(dev_port)) {
 		ret = PTR_ERR(dev_port);
@@ -3272,8 +3312,12 @@ exit_geni_serial_probe:
 static int msm_geni_serial_remove(struct platform_device *pdev)
 {
 	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
-	struct uart_driver *drv =
-			(struct uart_driver *)port->uport.private_data;
+	struct uart_driver *drv;
+
+	if (port == NULL)
+		return 0;
+
+	drv = (struct uart_driver *)port->uport.private_data;
 
 	if (!uart_console(&port->uport))
 		wakeup_source_unregister(port->geni_wake);
@@ -3396,7 +3440,12 @@ static int msm_geni_serial_sys_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
-	struct uart_port *uport = &port->uport;
+	struct uart_port *uport;
+
+	if (port == NULL)
+		return 0;
+
+	uport = &port->uport;
 
 	if (uart_console(uport)) {
 		uart_suspend_port((struct uart_driver *)uport->private_data,
@@ -3425,7 +3474,12 @@ static int msm_geni_serial_sys_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
-	struct uart_port *uport = &port->uport;
+	struct uart_port *uport;
+
+	if (port == NULL)
+		return 0;
+
+	uport = &port->uport;
 
 	if (uart_console(uport) &&
 	    console_suspend_enabled && uport->suspended) {
