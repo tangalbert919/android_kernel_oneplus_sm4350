@@ -15,4 +15,5 @@ subdir-y += xiangyu
 subdir-y += pikachu
 #subdir-y += apollob
 subdir-y += luigi
+subdir-y += dre
 #endif
