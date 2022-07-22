@@ -156,7 +156,7 @@ exit:
 	return length;
 }
 
-#ifdef OPLUS_FEATURE_POWERINFO_RPMH
+#if defined(OPLUS_FEATURE_POWERINFO_RPMH) && defined(CONFIG_OPLUS_POWERINFO_RPMH)
 static inline ssize_t oplus_append_data_to_buf(int index, char *buf, int length,
 					 struct stats_entry *data)
 {

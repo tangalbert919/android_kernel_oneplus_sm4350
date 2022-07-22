@@ -548,7 +548,7 @@ static ssize_t sgm41511_access_store(struct device *dev,
 
 static DEVICE_ATTR(sgm41511_access, 0660, sgm41511_access_show, sgm41511_access_store);
 
-void sgm41511_dump_registers()
+void sgm41511_dump_registers(void)
 {
 	int ret = 0;
 	int addr = 0;

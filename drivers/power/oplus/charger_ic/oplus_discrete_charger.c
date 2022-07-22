@@ -18,8 +18,8 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
 #include <linux/iio/consumer.h>
-#include "../../../../../../kernel/msm-5.4/drivers/usb/typec/tcpc/inc/tcpci.h"
-#include "../../../../../../kernel/msm-5.4/drivers/usb/typec/tcpc/inc/tcpm.h"
+#include "../../../usb/typec/tcpc/inc/tcpci.h"
+#include "../../../usb/typec/tcpc/inc/tcpm.h"
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
 #include <linux/rtc.h>
@@ -390,7 +390,7 @@ int oplus_chg_backup_soc(int backup_soc)
 	return rc;
 }
 
-#ifdef CONFIG_OPLUS_FEATURE_CHG_MISC
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
 extern bool ext_boot_with_console(void);
 #endif
 
@@ -459,7 +459,7 @@ static int oplus_chg_2uart_pinctrl_init(struct oplus_chg_chip *chip)
 		return -EINVAL;
 	}
 
-#ifdef CONFIG_OPLUS_FEATURE_CHG_MISC
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
 	if (!ext_boot_with_console())
 		pinctrl_select_state(chg->chg_2uart_pinctrl, chg->chg_2uart_sleep);
 #endif

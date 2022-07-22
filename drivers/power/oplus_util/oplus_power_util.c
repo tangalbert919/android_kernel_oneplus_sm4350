@@ -14,7 +14,7 @@
 #include <linux/jiffies.h>
 #include <linux/suspend.h>
 #include "oplus_power_util.h"
-#include "../../../drivers/input/oplus_secure_drivers/include/oplus_secure_common.h"
+#include "../../input/oplus_secure_drivers/include/oplus_secure_common.h"
 
 struct oplus_util oplus_util;
 static int polling_time = 60000;
