@@ -36,10 +36,6 @@ obj-$(CONFIG_OPLUS_SYSTEM_KERNEL)	+= oplus/system/
 obj-y				+= oplus/device_info/
 #endif /*OPLUS_FEATURE_TP_BASIC*/
 
-#ifdef OPLUS_FEATURE_RT_INFO
-obj-$(CONFIG_OPLUS_FEATURE_RT_INFO) += oplus/rt_info/
-#endif
-
 #ifdef OPLUS_FEATURE_SENSOR_SMEM
 obj-$(CONFIG_OPLUS_FEATURE_SENSOR_CFG) += oplus/sensor/
 #endif
