@@ -141,6 +141,10 @@ static int sixty = 60;
 #if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
 int sysctl_sched_assist_enabled = 1;
 int sysctl_sched_assist_scene = 0;
+
+#ifdef CONFIG_MMAP_LOCK_OPT
+int sysctl_uxchain_v2 = 1;
+#endif
 #endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 static int __maybe_unused neg_one = -1;
@@ -1466,14 +1470,6 @@ static struct ctl_table kern_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 #if defined(CONFIG_OPLUS_FEATURE_HUNG_TASK_ENHANCE) && defined(CONFIG_OPLUS_FEATURE_DEATH_HEALER)
-/* record the hung task killing */
-	{
-		.procname	= "hung_task_kill",
-		.data		= &sysctl_hung_task_oplus_kill,
-		.maxlen		= 128,
-		.mode		= 0666,
-		.proc_handler	= proc_dostring,
-	},
 /* Foreground background optimization,change max io count */
 	{
 		.procname	= "hung_task_maxiowait_count",

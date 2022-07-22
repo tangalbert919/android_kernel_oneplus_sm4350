@@ -4,7 +4,7 @@
  */
 #include <linux/cpufreq_times.h>
 #include "sched.h"
-#include "walt.h"
+#include "walt/walt.h"
 
 #ifdef OPLUS_FEATURE_TASK_CPUSTATS
 #ifdef CONFIG_OPLUS_CTP

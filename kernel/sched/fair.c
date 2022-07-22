@@ -25,7 +25,7 @@
 #include <trace/events/sched.h>
 #include <trace/hooks/sched.h>
 
-#include "walt.h"
+#include "walt/walt.h"
 
 #if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
 #include <linux/sched_assist/sched_assist_common.h>

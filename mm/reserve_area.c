@@ -15,9 +15,6 @@
 #ifdef CONFIG_OPLUS_HEALTHINFO
 #include <soc/oplus/healthinfo.h>
 #endif
-#ifdef CONFIG_OPLUS_HEALTHINFO
-#include <soc/oplus/oplus_healthinfo.h>
-#endif
 #include <linux/version.h>
 #define STACK_RLIMIT_OVERFFLOW (32<<20)
 #define THRIDPART_APP_UID_LOW_LIMIT 10000UL
