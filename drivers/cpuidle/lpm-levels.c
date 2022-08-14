@@ -1117,6 +1117,10 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		 * LPMs (XO and Vmin).
 		 */
 		if (!from_idle) {
+			#ifdef CONFIG_OPLUS_POWER_UTIL
+			extern void oplus_get_clk_stats(void);
+			oplus_get_clk_stats();
+			#endif
 			clock_debug_print_enabled();
 			regulator_debug_print_enabled();
 		}

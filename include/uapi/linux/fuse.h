@@ -342,6 +342,7 @@ struct fuse_file_lock {
 #define FUSE_NO_OPENDIR_SUPPORT (1 << 24)
 #define FUSE_EXPLICIT_INVAL_DATA (1 << 25)
 #define FUSE_MAP_ALIGNMENT	(1 << 26)
+#define FUSE_PASSTHROUGH	(1 << 31)
 
 /**
  * CUSE INIT request/reply flags
@@ -552,6 +553,7 @@ struct fuse_rename2_in {
 	uint64_t	newdir;
 	uint32_t	flags;
 	uint32_t	padding;
+	uint32_t	passthrough_fh;
 };
 
 struct fuse_link_in {
@@ -871,6 +873,9 @@ struct fuse_notify_retrieve_in {
 
 /* Device ioctls: */
 #define FUSE_DEV_IOC_CLONE	_IOR(229, 0, uint32_t)
+/* 127 is reserved for the V1 interface implementation in Android (deprecated) */
+/* 126 is reserved for the V2 interface implementation in Android */
+#define FUSE_DEV_IOC_PASSTHROUGH_OPEN	_IOW(229, 126, __u32)
 
 struct fuse_lseek_in {
 	uint64_t	fh;

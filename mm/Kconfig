@@ -882,3 +882,33 @@ config MULTIPLE_KSWAPD
 	 (echo <num> > /proc/sys/vm/kswapd_threads)
 
 	 Values not in the range of 1..16 are ignored.
+
+#ifdef OPLUS_FEATURE_MULTI_FREEAREA
+config PHYSICAL_ANTI_FRAGMENTATION
+	bool "Physical memory anti-fragmentation"
+	default y
+	help
+	 Turn on the function of Physical memory anti-fragmentation.
+#endif /* OPLUS_FEATURE_MULTI_FREEAREA */
+
+source "mm/zram_opt/Kconfig"
+config VIRTUAL_RESERVE_MEMORY
+	bool "reserved vma for gpu emergency mmap"
+	depends on QGKI
+	default n
+	help
+	 support reserved vma for gpu emergency mmap.
+
+config KVMALLOC_OPTIMIZATION
+	bool "use vmalloc for huge memory allocation"
+	depends on QGKI
+	default n
+	help
+	  use vmalloc for huge memory allocation
+
+source "mm/process_reclaim/Kconfig"
+source "mm/malloc_track/Kconfig"
+source "mm/task_mem/Kconfig"
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "mm/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */

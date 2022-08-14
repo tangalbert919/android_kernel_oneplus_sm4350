@@ -400,6 +400,14 @@ struct fuse_iqueue_ops {
 	 * Clean up when fuse_iqueue is destroyed
 	 */
 	void (*release)(struct fuse_iqueue *fiq);
+
+	/**
+	 * Signal that a sync request has been queued
+	 */
+#ifdef OPLUS_FEATURE_PERFORMANCE
+	void (*wake_sync_and_unlock)(struct fuse_iqueue *fiq, struct fuse_req *req)
+		__releases(fiq->lock);
+#endif
 };
 
 /** /dev/fuse input queue operations */
@@ -1109,5 +1117,10 @@ unsigned int fuse_len_args(unsigned int numargs, struct fuse_arg *args);
  */
 u64 fuse_get_unique(struct fuse_iqueue *fiq);
 void fuse_free_conn(struct fuse_conn *fc);
+
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+void acm_fuse_init_cache(void);
+void acm_fuse_free_cache(void);
+#endif
 
 #endif /* _FS_FUSE_I_H */
