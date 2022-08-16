@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _DSI_DEFS_H_
@@ -286,6 +286,46 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SET_POST_TIMING_SWITCH,
 	DSI_CMD_SET_QSYNC_ON,
 	DSI_CMD_SET_QSYNC_OFF,
+#ifdef OPLUS_BUG_STABILITY
+	DSI_CMD_POST_ON_BACKLIGHT,
+	DSI_CMD_AOD_ON,
+	DSI_CMD_AOD_OFF,
+	DSI_CMD_HBM_ON,
+	DSI_CMD_HBM_OFF,
+	DSI_CMD_AOD_HBM_ON,
+	DSI_CMD_AOD_HBM_OFF,
+	DSI_CMD_SEED_MODE0,
+	DSI_CMD_SEED_MODE1,
+	DSI_CMD_SEED_MODE2,
+	DSI_CMD_SEED_MODE3,
+	DSI_CMD_SEED_MODE4,
+	DSI_CMD_SEED_OFF,
+	DSI_CMD_NORMAL_HBM_ON,
+	DSI_CMD_AOD_HIGH_LIGHT_MODE,
+	DSI_CMD_AOD_LOW_LIGHT_MODE,
+	DSI_CMD_SPR_MODE0,
+	DSI_CMD_SPR_MODE1,
+	DSI_CMD_SPR_MODE2,
+	DSI_CMD_DATA_DIMMING_ON,
+	DSI_CMD_DATA_DIMMING_OFF,
+	DSI_CMD_OSC_CLK_MODEO0,
+	DSI_CMD_OSC_CLK_MODEO1,
+	DSI_CMD_SET_PANEL_ID1,
+	DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_ON,
+	DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_OFF,
+	DSI_CMD_CABC_OFF,
+	DSI_CMD_CABC_UI,
+	DSI_CMD_CABC_IMAGE,
+	DSI_CMD_CABC_VIDEO,
+	DSI_CMD_LOADING_EFFECT_MODE1,
+	DSI_CMD_LOADING_EFFECT_MODE2,
+	DSI_CMD_LOADING_EFFECT_OFF,
+#if defined(OPLUS_FEATURE_PXLW_IRIS5)
+	DSI_CMD_SET_ABYP,
+#endif
+	DSI_CMD_SET_ILI_READ_ON,
+	DSI_CMD_SET_ILI_READ_OFF,
+#endif
 	DSI_CMD_SET_MAX
 };
 
@@ -542,17 +582,12 @@ struct dsi_video_engine_cfg {
  * @wr_mem_continue:               DCS command for write_memory_continue.
  * @insert_dcs_command:            Insert DCS command as first byte of payload
  *                                 of the pixel data.
- * @mdp_idle_ctrl_en:		Enable idle insertion between command mode mdp packets.
- * @mdp_idle_ctrl_len:		No. of dsi pclk cycles of idle time to insert between
- *				   command mode mdp packets.
  */
 struct dsi_cmd_engine_cfg {
 	u32 max_cmd_packets_interleave;
 	u32 wr_mem_start;
 	u32 wr_mem_continue;
 	bool insert_dcs_command;
-	bool mdp_idle_ctrl_en;
-	u32 mdp_idle_ctrl_len;
 };
 
 /**
@@ -626,6 +661,10 @@ struct dsi_display_mode_priv_info {
 	struct msm_ratio pclk_scale;
 	struct msm_roi_caps roi_caps;
 	bool widebus_support;
+#ifdef OPLUS_BUG_STABILITY
+	int fod_on_vblank;
+	int fod_off_vblank;
+#endif /* OPLUS_BUG_STABILITY */
 	u32 allowed_mode_switch;
 };
 

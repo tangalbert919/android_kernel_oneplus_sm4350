@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -18,6 +18,10 @@
 #include "sde_core_irq.h"
 #include "dsi_panel.h"
 #include "sde_hw_color_proc_common_v4.h"
+#ifdef OPLUS_BUG_STABILITY
+#include "oplus_display_private_api.h"
+#include "oplus_onscreenfingerprint.h"
+#endif
 
 struct sde_cp_node {
 	u32 property_id;
@@ -1188,6 +1192,14 @@ static int sde_cp_enable_crtc_property(struct drm_crtc *crtc,
 }
 
 
+#ifdef OPLUS_BUG_STABILITY
+struct sde_kms *get_kms_(struct drm_crtc *crtc)
+{
+	return get_kms(crtc);
+}
+EXPORT_SYMBOL(get_kms_);
+#endif
+
 static void sde_cp_crtc_prop_attach(struct sde_cp_prop_attach *prop_attach)
 {
 
@@ -1435,7 +1447,7 @@ static void _sde_cp_crtc_enable_hist_irq(struct sde_crtc *sde_crtc)
 	struct sde_hw_dspp *hw_dspp = NULL;
 	struct sde_crtc_irq_info *node = NULL;
 	int i, irq_idx, ret = 0;
-	unsigned long flags, state_flags;
+	unsigned long flags;
 
 	if (!crtc_drm) {
 		DRM_ERROR("invalid crtc %pK\n", crtc_drm);
@@ -1465,13 +1477,12 @@ static void _sde_cp_crtc_enable_hist_irq(struct sde_crtc *sde_crtc)
 
 	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
 	node = _sde_cp_get_intr_node(DRM_EVENT_HISTOGRAM, sde_crtc);
-
+#ifdef OPLUS_BUG_STABILITY
 	if (!node) {
 		spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
 		return;
 	}
-
-	spin_lock_irqsave(&node->state_lock, state_flags);
+	spin_lock_irqsave(&node->state_lock, flags);
 	if (node->state == IRQ_DISABLED) {
 		ret = sde_core_irq_enable(kms, &irq_idx, 1);
 		if (ret)
@@ -1479,8 +1490,9 @@ static void _sde_cp_crtc_enable_hist_irq(struct sde_crtc *sde_crtc)
 		else
 			node->state = IRQ_ENABLED;
 	}
-	spin_unlock_irqrestore(&node->state_lock, state_flags);
+	spin_unlock_irqrestore(&node->state_lock, flags);
 	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
+#endif/* OPLUS_BUG_STABILITY */
 }
 
 static int sde_cp_crtc_checkfeature(struct sde_cp_node *prop_node,
@@ -1545,6 +1557,11 @@ static int sde_cp_crtc_checkfeature(struct sde_cp_node *prop_node,
 	return ret;
 }
 
+#ifdef OPLUS_BUG_STABILITY
+extern struct drm_msm_pcc oplus_save_pcc;
+extern bool oplus_pcc_enabled;
+extern bool oplus_skip_pcc;
+#endif
 static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 				   struct sde_crtc *sde_crtc)
 {
@@ -1558,6 +1575,26 @@ static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
 
 	memset(&hw_cfg, 0, sizeof(hw_cfg));
 	sde_cp_get_hw_payload(prop_node, &hw_cfg, &feature_enabled);
+
+#ifdef OPLUS_BUG_STABILITY
+	if (prop_node->feature == SDE_CP_CRTC_DSPP_PCC && is_dsi_panel(&sde_crtc->base)) {
+		if (hw_cfg.payload && (hw_cfg.len == sizeof(oplus_save_pcc))) {
+			memcpy(&oplus_save_pcc, hw_cfg.payload, hw_cfg.len);
+			oplus_pcc_enabled = true;
+
+			if (is_skip_pcc(&sde_crtc->base)) {
+				hw_cfg.payload = NULL;
+				hw_cfg.len = 0;
+				oplus_skip_pcc = true;
+			} else {
+				oplus_skip_pcc = false;
+			}
+		} else {
+			oplus_pcc_enabled = false;
+		}
+	}
+#endif
+
 	hw_cfg.num_of_mixers = sde_crtc->num_mixers;
 	hw_cfg.last_feature = 0;
 
@@ -1840,8 +1877,6 @@ int sde_cp_crtc_check_properties(struct drm_crtc *crtc,
 		if (ret) {
 			DRM_ERROR("failed check on prop_node %u\n",
 					prop_node->property_id);
-			/* remove invalid feature from dirty list */
-			list_del_init(&prop_node->dirty_list);
 			goto exit;
 		}
 	}
@@ -1961,42 +1996,6 @@ static int sde_cp_crtc_set_pu_features(struct drm_crtc *crtc, bool *need_flush)
 	return 0;
 }
 
-static void _sde_clear_ltm_merge_mode(struct sde_crtc *sde_crtc)
-{
-	u32 num_mixers = 0, i = 0;
-	struct sde_hw_ctl *ctl = NULL;
-	struct sde_hw_dspp *hw_dspp = NULL;
-	unsigned long irq_flags;
-
-	num_mixers = sde_crtc->num_mixers;
-	if (!num_mixers) {
-		DRM_ERROR("no mixers for this crtc\n");
-		return;
-	}
-
-	spin_lock_irqsave(&sde_crtc->ltm_lock, irq_flags);
-	if (!sde_crtc->ltm_merge_clear_pending) {
-		spin_unlock_irqrestore(&sde_crtc->ltm_lock, irq_flags);
-		return;
-	}
-
-	sde_cp_dspp_flush_helper(sde_crtc, SDE_CP_CRTC_DSPP_LTM_HIST_CTL);
-	for (i = 0; i < num_mixers; i++) {
-		hw_dspp = sde_crtc->mixers[i].hw_dspp;
-		ctl = sde_crtc->mixers[i].hw_ctl;
-		if (!hw_dspp || !ctl || i >= DSPP_MAX)
-			continue;
-		if (hw_dspp->ops.clear_ltm_merge_mode)
-			hw_dspp->ops.clear_ltm_merge_mode(hw_dspp);
-		if (ctl->ops.update_bitmask_dspp)
-			ctl->ops.update_bitmask_dspp(ctl, hw_dspp->idx, 1);
-	}
-
-	sde_crtc->ltm_merge_clear_pending = false;
-	SDE_EVT32(DRMID(&sde_crtc->base), num_mixers, sde_crtc->ltm_merge_clear_pending);
-	spin_unlock_irqrestore(&sde_crtc->ltm_lock, irq_flags);
-}
-
 void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 {
 	struct sde_crtc *sde_crtc = NULL;
@@ -2006,6 +2005,11 @@ void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 	u32 num_mixers = 0, i = 0;
 	int rc = 0;
 	bool need_flush = false;
+
+	#ifdef OPLUS_BUG_STABILITY
+	bool dirty_pcc = false;
+	#endif /* OPLUS_BUG_STABILITY */
+
 
 	if (!crtc || !crtc->dev) {
 		DRM_ERROR("invalid crtc %pK dev %pK\n", crtc,
@@ -2026,15 +2030,20 @@ void sde_cp_crtc_apply_properties(struct drm_crtc *crtc)
 	}
 
 	mutex_lock(&sde_crtc->crtc_cp_lock);
-	_sde_clear_ltm_merge_mode(sde_crtc);
 
-	if (list_empty(&sde_crtc->dirty_list) &&
+	#ifdef OPLUS_BUG_STABILITY
+	dirty_pcc = sde_cp_crtc_update_pcc(crtc);
+	if (dirty_pcc) {
+		set_dspp_flush = true;
+	}
+	if (!dirty_pcc && list_empty(&sde_crtc->dirty_list) &&
 			list_empty(&sde_crtc->ad_dirty) &&
 			list_empty(&sde_crtc->ad_active) &&
 			list_empty(&sde_crtc->active_list)) {
 		DRM_DEBUG_DRIVER("all lists are empty\n");
 		goto exit;
 	}
+	#endif /* OPLUS_BUG_STABILITY */
 
 	rc = sde_cp_crtc_set_pu_features(crtc, &need_flush);
 	if (rc) {
@@ -2346,10 +2355,9 @@ void sde_cp_crtc_destroy_properties(struct drm_crtc *crtc)
 	}
 	sde_crtc->ltm_buffer_cnt = 0;
 	sde_crtc->ltm_hist_en = false;
-	sde_crtc->ltm_merge_clear_pending = false;
-	SDE_EVT32(DRMID(crtc), sde_crtc->ltm_merge_clear_pending);
+#ifdef OPLUS_BUG_STABILITY
 	sde_crtc->hist_irq_idx = -1;
-
+#endif/* OPLUS_BUG_STABILITY */
 	mutex_destroy(&sde_crtc->crtc_cp_lock);
 	INIT_LIST_HEAD(&sde_crtc->active_list);
 	INIT_LIST_HEAD(&sde_crtc->dirty_list);
@@ -2425,7 +2433,6 @@ void sde_cp_crtc_clear(struct drm_crtc *crtc)
 	list_del_init(&sde_crtc->dirty_list);
 	list_del_init(&sde_crtc->ad_active);
 	list_del_init(&sde_crtc->ad_dirty);
-	sde_crtc->cp_pu_feature_mask = 0;
 	mutex_unlock(&sde_crtc->crtc_cp_lock);
 
 	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
@@ -2444,8 +2451,9 @@ void sde_cp_crtc_clear(struct drm_crtc *crtc)
 	}
 	sde_crtc->ltm_buffer_cnt = 0;
 	sde_crtc->ltm_hist_en = false;
-	sde_crtc->ltm_merge_clear_pending = false;
+#ifdef OPLUS_BUG_STABILITY
 	sde_crtc->hist_irq_idx = -1;
+#endif/* OPLUS_BUG_STABILITY */
 	INIT_LIST_HEAD(&sde_crtc->ltm_buf_free);
 	INIT_LIST_HEAD(&sde_crtc->ltm_buf_busy);
 }
@@ -3279,6 +3287,7 @@ static void sde_cp_hist_interrupt_cb(void *arg, int irq_idx)
 	u32 lock_hist = 1;
 	u32 i;
 
+#ifdef OPLUS_BUG_STABILITY
 	/* lock histogram buffer */
 	for (i = 0; i < crtc->num_mixers; i++) {
 		hw_dspp = crtc->mixers[i].hw_dspp;
@@ -3289,7 +3298,8 @@ static void sde_cp_hist_interrupt_cb(void *arg, int irq_idx)
 	crtc->hist_irq_idx = irq_idx;
 	/* notify histogram event */
 	sde_crtc_event_queue(crtc_drm, sde_cp_notify_hist_event,
-						&crtc->hist_irq_idx, true);
+							&crtc->hist_irq_idx, true);
+#endif/* OPLUS_BUG_STABILITY */
 }
 
 static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
@@ -3300,10 +3310,11 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 	struct drm_msm_hist *hist_data;
 	struct sde_kms *kms;
 	struct sde_crtc_irq_info *node = NULL;
-	unsigned long flags, state_flags;
+	unsigned long flags;
 	int ret, irq_idx;
 	u32 i, lock_hist = 0;
 
+#ifdef OPLUS_BUG_STABILITY
 	if (!crtc_drm || !arg) {
 		DRM_ERROR("invalid drm crtc %pK or arg %pK\n", crtc_drm, arg);
 		return;
@@ -3320,8 +3331,7 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 		SDE_ERROR("invalid arg(s)\n");
 		return;
 	}
-
-	/* disable histogram irq */
+/* disable histogram irq */
 	spin_lock_irqsave(&crtc->spin_lock, flags);
 	node = _sde_cp_get_intr_node(DRM_EVENT_HISTOGRAM, crtc);
 
@@ -3346,13 +3356,13 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 	}
 
 	irq_idx = *(int *)arg;
-	spin_lock_irqsave(&node->state_lock, state_flags);
+	spin_lock_irqsave(&node->state_lock, flags);
 	if (node->state == IRQ_ENABLED) {
 		ret = sde_core_irq_disable_nolock(kms, irq_idx);
 		if (ret) {
 			DRM_ERROR("failed to disable irq %d, ret %d\n",
 				irq_idx, ret);
-			spin_unlock_irqrestore(&node->state_lock, state_flags);
+			spin_unlock_irqrestore(&node->state_lock, flags);
 			spin_unlock_irqrestore(&crtc->spin_lock, flags);
 			ret = pm_runtime_get_sync(kms->dev->dev);
 			if (ret < 0) {
@@ -3373,12 +3383,12 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 		}
 		node->state = IRQ_DISABLED;
 	}
-	spin_unlock_irqrestore(&node->state_lock, state_flags);
+	spin_unlock_irqrestore(&node->state_lock, flags);
 	spin_unlock_irqrestore(&crtc->spin_lock, flags);
 
 	if (!crtc->hist_blob)
 		return;
-
+#endif/* OPLUS_BUG_STABILITY */
 	ret = pm_runtime_get_sync(kms->dev->dev);
 	if (ret < 0) {
 		SDE_ERROR("failed to enable power resource %d\n", ret);
@@ -3834,8 +3844,6 @@ static void _sde_cp_crtc_disable_ltm_hist(struct sde_crtc *sde_crtc,
 
 	spin_lock_irqsave(&sde_crtc->ltm_lock, irq_flags);
 	sde_crtc->ltm_hist_en = false;
-	sde_crtc->ltm_merge_clear_pending = true;
-	SDE_EVT32(DRMID(&sde_crtc->base), sde_crtc->ltm_merge_clear_pending);
 	INIT_LIST_HEAD(&sde_crtc->ltm_buf_free);
 	INIT_LIST_HEAD(&sde_crtc->ltm_buf_busy);
 	for (i = 0; i < sde_crtc->ltm_buffer_cnt; i++)
@@ -3907,8 +3915,7 @@ static void sde_cp_ltm_hist_interrupt_cb(void *arg, int irq_idx)
 			hw_dspp->ops.setup_ltm_hist_ctrl(hw_dspp, NULL, false,
 				0);
 		}
-		sde_crtc->ltm_merge_clear_pending = true;
-		SDE_EVT32(DRMID(&sde_crtc->base), sde_crtc->ltm_merge_clear_pending);
+
 		spin_unlock_irqrestore(&sde_crtc->ltm_lock, irq_flags);
 		DRM_DEBUG_DRIVER("LTM histogram is disabled\n");
 		return;

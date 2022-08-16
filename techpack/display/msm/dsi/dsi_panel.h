@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2020, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _DSI_PANEL_H_
@@ -20,6 +20,13 @@
 #include "dsi_pwr.h"
 #include "dsi_parser.h"
 #include "msm_drv.h"
+#ifdef OPLUS_BUG_STABILITY
+#include "oplus_dsi_support.h"
+struct oplus_brightness_alpha {
+	u32 brightness;
+	u32 alpha;
+};
+#endif /*OPLUS_BUG_STABILITY*/
 
 #define MAX_BL_LEVEL 4096
 #define MAX_BL_SCALE_LEVEL 1024
@@ -121,6 +128,12 @@ struct dsi_backlight_config {
 	u32 bl_min_level;
 	u32 bl_max_level;
 	u32 brightness_max_level;
+#ifdef OPLUS_BUG_STABILITY
+	u32 bl_normal_max_level;
+	u32 brightness_normal_max_level;
+	u32 brightness_default_level;
+#endif /* OPLUS_BUG_STABILITY */
+
 	u32 bl_level;
 	u32 bl_scale;
 	u32 bl_scale_sv;
@@ -153,6 +166,18 @@ struct dsi_panel_reset_config {
 	int disp_en_gpio;
 	int lcd_mode_sel_gpio;
 	u32 mode_sel_state;
+#if defined(CONFIG_PXLW_IRIS5)
+        int iris_rst_gpio;
+        int abyp_gpio;
+        int abyp_status_gpio;
+        int iris_osd_gpio;
+        bool iris_osd_autorefresh;
+        int iris_vdd_gpio;
+#endif
+#ifdef OPLUS_BUG_STABILITY
+	int panel_vout_gpio;
+	int panel_vddr_aod_en_gpio;
+#endif
 };
 
 enum esd_check_status_mode {
@@ -176,6 +201,17 @@ struct drm_panel_esd_config {
 	u8 *status_buf;
 	u32 groups;
 };
+
+#ifdef OPLUS_BUG_STABILITY
+struct dsi_panel_oplus_privite {
+	const char *vendor_name;
+	const char *manufacture_name;
+	bool skip_mipi_last_cmd;
+	bool is_pxlw_iris5;
+	bool dfps_idle_off;
+	bool cabc_enabled;
+};
+#endif /* OPLUS_BUG_STABILITY */
 
 struct dsi_panel_spr_info {
 	bool enable;
@@ -237,6 +273,11 @@ struct dsi_panel {
 
 	struct dsi_parser_utils utils;
 
+#if defined(CONFIG_PXLW_IRIS5)
+	struct dsi_regulator_info iris5_power_info;
+	struct clk *ext_clk;
+#endif
+
 	bool lp11_init;
 	bool ulps_feature_enabled;
 	bool ulps_suspend_enabled;
@@ -244,7 +285,6 @@ struct dsi_panel {
 	bool reset_gpio_always_on;
 	atomic_t esd_recovery_pending;
 
-	bool is_twm_en;
 	bool panel_initialized;
 	bool te_using_watchdog_timer;
 	struct dsi_qsync_capabilities qsync_caps;
@@ -255,6 +295,14 @@ struct dsi_panel {
 	struct dsi_panel_spr_info spr_info;
 
 	bool sync_broadcast_en;
+#ifdef OPLUS_BUG_STABILITY
+	bool is_hbm_enabled;
+	/* Fix aod flash problem */
+	bool need_power_on_backlight;
+	struct oplus_brightness_alpha *ba_seq;
+	int ba_count;
+	struct dsi_panel_oplus_privite oplus_priv;
+#endif
 	u32 dsc_count;
 	u32 lm_count;
 
@@ -389,6 +437,21 @@ int dsi_panel_get_io_resources(struct dsi_panel *panel,
 
 void dsi_panel_calc_dsi_transfer_time(struct dsi_host_common_cfg *config,
 		struct dsi_display_mode *mode, u32 frame_threshold_us);
+
+#ifdef OPLUS_BUG_STABILITY
+int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
+			   enum dsi_cmd_set_type type);
+#endif
+
+#if defined(CONFIG_PXLW_IRIS5)
+void iris5_gpio_free(struct dsi_panel *panel);
+void iris5_gpio_request(struct dsi_panel *panel);
+void iris5_gpio_parse(struct dsi_panel *panel);
+void iris5_power_off(struct dsi_panel *panel);
+void iris5_control_pwr_regulator(struct dsi_panel *panel, bool on);
+void iris5_reset(struct dsi_panel *panel);
+void iris5_power_on(struct dsi_panel *panel);
+#endif
 
 int dsi_panel_get_cmd_pkt_count(const char *data, u32 length, u32 *cnt);
 

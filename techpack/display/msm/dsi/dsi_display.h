@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _DSI_DISPLAY_H_
@@ -19,6 +19,9 @@
 #include "dsi_ctrl.h"
 #include "dsi_phy.h"
 #include "dsi_panel.h"
+#ifdef OPLUS_BUG_STABILITY
+#include "oplus_dsi_support.h"
+#endif /*OPLUS_BUG_STABILITY*/
 
 #define MAX_DSI_CTRLS_PER_DISPLAY             2
 #define DSI_CLIENT_NAME_SIZE		20
@@ -426,14 +429,6 @@ int dsi_display_get_default_lms(void *dsi_display, u32 *num_lm);
  */
 int dsi_display_get_qsync_min_fps(void *dsi_display, u32 mode_fps);
 
-/**
- * dsi_conn_get_lm_from_mode() - retrieves LM count from dsi mode priv info
- * @display:            Handle to display.
- * @mode:               Pointer to DRM mode structure
- *
- * Return: LM count from dsi panel topology
- */
-int dsi_conn_get_lm_from_mode(void *dsi_display, const struct drm_display_mode *mode);
 
 /**
  * dsi_display_find_mode() - retrieve cached DSI mode given relevant params
@@ -628,7 +623,7 @@ int dsi_pre_clkon_cb(void *priv, enum dsi_clk_type clk_type,
  * Return: error code.
  */
 int dsi_display_unprepare(struct dsi_display *display);
-int dsi_display_set_ulp_load(struct dsi_display *display, bool enable);
+
 int dsi_display_set_tpg_state(struct dsi_display *display, bool enable);
 
 int dsi_display_clock_gate(struct dsi_display *display, bool enable);
@@ -768,6 +763,15 @@ enum dsi_pixel_format dsi_display_get_dst_format(
  */
 int dsi_display_cont_splash_config(void *display);
 
+#ifdef OPLUS_BUG_STABILITY
+struct dsi_display *get_main_display(void);
+
+/* Add for implement panel register read */
+int dsi_host_alloc_cmd_tx_buffer(struct dsi_display *display);
+int dsi_display_cmd_engine_enable(struct dsi_display *display);
+int dsi_display_cmd_engine_disable(struct dsi_display *display);
+#endif
+
 /**
  * dsi_display_cont_splash_res_disable() - Disable resource votes added in probe
  * @display:    Pointer to dsi display
@@ -792,11 +796,5 @@ int dsi_display_get_panel_vfp(void *display,
  * Return: Zero on Success
  */
 int dsi_display_dump_clks_state(struct dsi_display *display);
-
-/**
- * dsi_display_dfps_update_parent() - update dsi clock parent to src clock
- * @display:         Handle to display
- */
-void dsi_display_dfps_update_parent(struct dsi_display *display);
 
 #endif /* _DSI_DISPLAY_H_ */

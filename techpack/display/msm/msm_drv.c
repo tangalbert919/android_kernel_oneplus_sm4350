@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -41,7 +41,6 @@
 #include <linux/kthread.h>
 #include <uapi/linux/sched/types.h>
 #include <drm/drm_of.h>
-#include <drm/drm_auth.h>
 #include <drm/drm_probe_helper.h>
 
 #include "msm_drv.h"
@@ -889,12 +888,12 @@ static int msm_drm_component_init(struct device *dev)
 		}
 	}
 
-	drm_mode_config_reset(ddev);
-
 	ret = drm_dev_register(ddev, 0);
 	if (ret)
 		goto fail;
 	priv->registered = true;
+
+	drm_mode_config_reset(ddev);
 
 	if (kms && kms->funcs && kms->funcs->cont_splash_config) {
 		ret = kms->funcs->cont_splash_config(kms, NULL);
@@ -992,15 +991,6 @@ static void context_close(struct msm_file_private *ctx)
 	kfree(ctx);
 }
 
-static void msm_preclose(struct drm_device *dev, struct drm_file *file)
-{
-	struct msm_drm_private *priv = dev->dev_private;
-	struct msm_kms *kms = priv->kms;
-
-	if (kms && kms->funcs && kms->funcs->preclose)
-		kms->funcs->preclose(kms, file);
-}
-
 static void msm_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct msm_drm_private *priv = dev->dev_private;
@@ -1042,7 +1032,7 @@ static void msm_lastclose(struct drm_device *dev)
 	 * commit then ignore the last close call
 	 */
 	if (kms->funcs && kms->funcs->check_for_splash
-		&& kms->funcs->check_for_splash(kms, NULL))
+		&& kms->funcs->check_for_splash(kms))
 		return;
 
 	/*
@@ -1499,7 +1489,6 @@ static int msm_release(struct inode *inode, struct file *filp)
 	int ret = 0;
 
 	mutex_lock(&msm_release_lock);
-
 	file_priv = filp->private_data;
 	if (!file_priv) {
 		ret = -EINVAL;
@@ -1537,14 +1526,6 @@ static int msm_release(struct inode *inode, struct file *filp)
 						false);
 		kfree(node);
 	}
-
-	/**
-	 * Handle preclose operation here for removing fb's whose
-	 * refcount > 1. This operation is not triggered from upstream
-	 * drm as msm_driver does not support DRIVER_LEGACY feature.
-	 */
-	if (drm_is_current_master(file_priv))
-		msm_preclose(dev, file_priv);
 
 	ret = drm_release(inode, filp);
 	filp->private_data = NULL;

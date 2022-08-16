@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2021 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2014-2020 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -36,6 +36,9 @@
 #include "sde_vbif.h"
 #include "sde_plane.h"
 #include "sde_color_processing.h"
+#ifdef OPLUS_BUG_STABILITY
+#include "oplus_display_private_api.h"
+#endif
 
 #define SDE_DEBUG_PLANE(pl, fmt, ...) SDE_DEBUG("plane%d " fmt,\
 		(pl) ? (pl)->base.base.id : -1, ##__VA_ARGS__)
@@ -123,7 +126,6 @@ struct sde_plane {
 	struct sde_csc_cfg *csc_usr_ptr;
 	struct sde_csc_cfg *csc_ptr;
 
-	uint32_t cached_lut_flag;
 	struct sde_hw_scaler3_cfg scaler3_cfg;
 	struct sde_hw_pixel_ext pixel_ext;
 
@@ -2827,6 +2829,9 @@ static void _sde_plane_map_prop_to_dirty_bits(void)
 	/* no special action required */
 	plane_prop_array[PLANE_PROP_INFO] =
 	plane_prop_array[PLANE_PROP_ALPHA] =
+#ifdef OPLUS_BUG_STABILITY
+	plane_prop_array[PLANE_PROP_CUSTOM] =
+#endif /* OPLUS_BUG_STABILITY */
 	plane_prop_array[PLANE_PROP_INPUT_FENCE] =
 	plane_prop_array[PLANE_PROP_BLEND_OP] = 0;
 
@@ -3179,21 +3184,6 @@ static void _sde_plane_update_properties(struct drm_plane *plane,
 	pstate->dirty = 0x0;
 }
 
-static void _sde_plane_check_lut_dirty(struct sde_plane *psde,
-			struct sde_plane_state *pstate)
-{
-	/**
-	 * Valid configuration if scaler is not enabled or
-	 * lut flag is set
-	 */
-	if (pstate->scaler3_cfg.lut_flag || !pstate->scaler3_cfg.enable)
-		return;
-
-	pstate->scaler3_cfg.lut_flag = psde->cached_lut_flag;
-	SDE_EVT32(DRMID(&psde->base), pstate->scaler3_cfg.lut_flag,
-		SDE_EVTLOG_ERROR);
-}
-
 static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 				struct drm_plane_state *old_state)
 {
@@ -3245,16 +3235,10 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 			state->crtc_w, state->crtc_h,
 			state->crtc_x, state->crtc_y);
 
-	/* Caching the valid lut flag in sde plane */
-	if (pstate->scaler3_cfg.enable &&
-			pstate->scaler3_cfg.lut_flag)
-		psde->cached_lut_flag = pstate->scaler3_cfg.lut_flag;
-
 	/* force reprogramming of all the parameters, if the flag is set */
 	if (psde->revalidate) {
 		SDE_DEBUG("plane:%d - reconfigure all the parameters\n",
 				plane->base.id);
-		_sde_plane_check_lut_dirty(psde, pstate);
 		pstate->dirty = SDE_PLANE_DIRTY_ALL | SDE_PLANE_DIRTY_CP;
 		psde->revalidate = false;
 	}
@@ -3574,7 +3558,6 @@ static void _sde_plane_setup_capabilities_blob(struct sde_plane *psde,
 	bool is_master = !psde->is_virtual;
 	const struct sde_format_extended *format_list;
 	u32 index;
-	int pipe_id;
 
 	if (is_master) {
 		format_list = psde->pipe_sblk->format_list;
@@ -3613,22 +3596,13 @@ static void _sde_plane_setup_capabilities_blob(struct sde_plane *psde,
 			psde->pipe_sblk->max_per_pipe_bw * 1000LL);
 	sde_kms_info_add_keyint(info, "max_per_pipe_bw_high",
 			psde->pipe_sblk->max_per_pipe_bw_high * 1000LL);
-
-	if (psde->pipe <= SSPP_VIG3 && psde->pipe >= SSPP_VIG0)
-		pipe_id = psde->pipe -  SSPP_VIG0;
-	else if (psde->pipe <= SSPP_RGB3 && psde->pipe >= SSPP_RGB0)
-		pipe_id = psde->pipe -  SSPP_RGB0;
-	else if (psde->pipe <= SSPP_DMA3 && psde->pipe >= SSPP_DMA0)
-		pipe_id = psde->pipe -  SSPP_DMA0;
-	else
-		pipe_id = -1;
-
-	sde_kms_info_add_keyint(info, "pipe_idx", pipe_id);
-
 	index = (master_plane_id == 0) ? 0 : 1;
 	if (catalog->has_demura &&
-	    catalog->demura_supported[psde->pipe][index] != ~0x0)
+	    catalog->demura_supported[psde->pipe][index] != ~0x0) {
 		sde_kms_info_add_keyint(info, "demura_block", index);
+		sde_kms_info_add_keyint(info, "demura_pipe_id",
+				psde->pipe - SSPP_DMA0);
+	}
 
 	if (psde->features & BIT(SDE_SSPP_SEC_UI_ALLOWED))
 		sde_kms_info_add_keyint(info, "sec_ui_allowed", 1);
@@ -3740,6 +3714,11 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 	msm_property_install_range(&psde->property_info, "zpos",
 		0x0, 0, zpos_max, zpos_def, PLANE_PROP_ZPOS);
 
+
+#ifdef OPLUS_BUG_STABILITY
+	msm_property_install_range(&psde->property_info,"PLANE_CUST",
+		0x0, 0, INT_MAX, 0, PLANE_PROP_CUSTOM);
+#endif
 	msm_property_install_range(&psde->property_info, "alpha",
 		0x0, 0, 255, 255, PLANE_PROP_ALPHA);
 
