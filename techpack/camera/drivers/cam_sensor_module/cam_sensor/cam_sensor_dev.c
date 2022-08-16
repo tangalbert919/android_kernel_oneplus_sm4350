@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 #include "cam_sensor_dev.h"
@@ -9,36 +9,14 @@
 #include "cam_sensor_core.h"
 #include "camera_main.h"
 
-static int cam_sensor_subdev_close_internal(struct v4l2_subdev *sd,
-	struct v4l2_subdev_fh *fh)
-{
-	struct cam_sensor_ctrl_t *s_ctrl =
-		v4l2_get_subdevdata(sd);
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
+#define OPLUS_FEATURE_CAMERA_COMMON
+#endif
 
-	if (!s_ctrl) {
-		CAM_ERR(CAM_SENSOR, "s_ctrl ptr is NULL");
-		return -EINVAL;
-	}
-
-	mutex_lock(&(s_ctrl->cam_sensor_mutex));
-	cam_sensor_shutdown(s_ctrl);
-	mutex_unlock(&(s_ctrl->cam_sensor_mutex));
-
-	return 0;
-}
-
-static int cam_sensor_subdev_close(struct v4l2_subdev *sd,
-	struct v4l2_subdev_fh *fh)
-{
-	bool crm_active = cam_req_mgr_is_open(CAM_SENSOR);
-
-	if (crm_active) {
-		CAM_DBG(CAM_SENSOR, "CRM is ACTIVE, close should be from CRM");
-		return 0;
-	}
-
-	return cam_sensor_subdev_close_internal(sd, fh);
-}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "oplus_cam_sensor_dev.h"
+static unsigned int is_ftm_current_test = 0;
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 
 static long cam_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 	unsigned int cmd, void *arg)
@@ -54,20 +32,51 @@ static long cam_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 			CAM_ERR(CAM_SENSOR,
 				"Failed in Driver cmd: %d", rc);
 		break;
-	case CAM_SD_SHUTDOWN:
-		if (!cam_req_mgr_is_shutdown()) {
-			CAM_ERR(CAM_CORE, "SD shouldn't come from user space");
-			return 0;
-		}
-
-		rc = cam_sensor_subdev_close_internal(sd, NULL);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	case VIDIOC_CAM_FTM_POWNER_DOWN:
+	case VIDIOC_CAM_FTM_POWNER_UP:{
+		rc = oplus_cam_sensor_subdev_ioctl(sd, cmd, arg, &is_ftm_current_test);
 		break;
+	}
+	case VIDIOC_CAM_SENSOR_STATR:
+		rc = cam_sensor_start(s_ctrl);
+		break;
+	case VIDIOC_CAM_SENSOR_STOP:
+		rc = cam_sensor_stop(s_ctrl);
+		break;
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
 	default:
 		CAM_ERR(CAM_SENSOR, "Invalid ioctl cmd: %d", cmd);
 		rc = -ENOIOCTLCMD;
 		break;
 	}
 	return rc;
+}
+
+static int cam_sensor_subdev_close(struct v4l2_subdev *sd,
+	struct v4l2_subdev_fh *fh)
+{
+	struct cam_sensor_ctrl_t *s_ctrl =
+		v4l2_get_subdevdata(sd);
+
+	if (!s_ctrl) {
+		CAM_ERR(CAM_SENSOR, "s_ctrl ptr is NULL");
+		return -EINVAL;
+	}
+
+	mutex_lock(&(s_ctrl->cam_sensor_mutex));
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (!is_ftm_current_test) {
+		cam_sensor_shutdown(s_ctrl);
+	}
+#else
+	cam_sensor_shutdown(s_ctrl);
+#endif /*OPLUS_FEATURE_CAMERA_COMMON*/
+
+	mutex_unlock(&(s_ctrl->cam_sensor_mutex));
+
+	return 0;
 }
 
 #ifdef CONFIG_COMPAT
@@ -143,8 +152,6 @@ static int cam_sensor_init_subdev_params(struct cam_sensor_ctrl_t *s_ctrl)
 	s_ctrl->v4l2_dev_str.ent_function =
 		CAM_SENSOR_DEVICE_TYPE;
 	s_ctrl->v4l2_dev_str.token = s_ctrl;
-	s_ctrl->v4l2_dev_str.close_seq_prior =
-		CAM_SD_CLOSE_MEDIUM_PRIORITY;
 
 	rc = cam_register_subdev(&(s_ctrl->v4l2_dev_str));
 	if (rc)
@@ -216,6 +223,13 @@ static int32_t cam_sensor_driver_i2c_probe(struct i2c_client *client,
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.streamon_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.streamoff_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.read_settings.list_head));
+
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	mutex_init(&(s_ctrl->sensor_power_state_mutex));
+	mutex_init(&(s_ctrl->sensor_initsetting_mutex));
+	s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;
+	s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+	#endif // OPLUS_FEATURE_CAMERA_COMMON
 
 	for (i = 0; i < MAX_PER_FRAME_ARRAY; i++) {
 		INIT_LIST_HEAD(&(s_ctrl->i2c_data.per_frame[i].list_head));

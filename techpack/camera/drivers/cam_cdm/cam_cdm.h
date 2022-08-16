@@ -24,7 +24,7 @@
 #define CAM_MAX_SW_CDM_VERSION_SUPPORTED  1
 #define CAM_SW_CDM_INDEX                  0
 #define CAM_CDM_INFLIGHT_WORKS            5
-#define CAM_CDM_HW_RESET_TIMEOUT          300
+#define CAM_CDM_HW_RESET_TIMEOUT          900
 
 /*
  * Macros to get prepare and get information
@@ -108,14 +108,6 @@
 	(CAM_CDM_IRQ_STATUS_ERROR_INV_CMD_MASK | \
 	 CAM_CDM_IRQ_STATUS_ERROR_OVER_FLOW_MASK | \
 	 CAM_CDM_IRQ_STATUS_ERROR_AHB_BUS_MASK)
-
-
-struct cam_cdm_pid_mid_data {
-	int cdm_pid;
-	int cdm_mid;
-	int ope_cdm_pid;
-	int ope_cdm_mid;
-};
 
 /* Structure to store hw version info */
 struct cam_version_reg {
@@ -360,7 +352,6 @@ struct cam_cdm_common_regs {
 	const struct cam_cdm_icl_regs *icl_reg;
 	uint32_t spare;
 	uint32_t priority_group_bit_offset;
-	struct cam_cdm_pid_mid_data *cdm_pid_mid_info;
 };
 
 /**

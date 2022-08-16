@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _CAM_ISP_HW_H_
@@ -135,10 +135,6 @@ enum cam_isp_hw_cmd_type {
 	CAM_ISP_HW_CMD_CSID_CHANGE_HALT_MODE,
 	CAM_ISP_HW_CMD_SET_SFE_DEBUG_CFG,
 	CAM_ISP_HW_CMD_QUERY_BUS_CAP,
-	CAM_ISP_HW_CMD_GET_CLOCK_RATE,
-	CAM_ISP_HW_CMD_DYNAMIC_CLOCK_UPDATE,
-	CAM_ISP_HW_DUMP_HW_SRC_CLK_RATE,
-	CAM_ISP_HW_CMD_TPG_SET_PATTERN,
 	CAM_ISP_HW_CMD_MAX,
 };
 
@@ -217,7 +213,7 @@ struct cam_isp_blanking_config {
  * @hw_idx:         IFE hw index
  * @err_type:       Error type if any
  * @reg_val:        Any critical register value captured during irq handling
- * @evt_param       Specific info about frame
+ *
  */
 struct cam_isp_hw_event_info {
 	enum cam_isp_resource_type     res_type;
@@ -225,7 +221,6 @@ struct cam_isp_hw_event_info {
 	uint32_t                       hw_idx;
 	uint32_t                       err_type;
 	uint32_t                       reg_val;
-	uint32_t                       evt_param;
 };
 
 /*
