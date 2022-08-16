@@ -27,6 +27,8 @@
 #include "internal.h"
 #include "asoc/bolero-slave-internal.h"
 
+#define WCD9370_VARIANT 0
+#define WCD9375_VARIANT 5
 #define WCD937X_VARIANT_ENTRY_SIZE 32
 
 #define NUM_SWRS_DT_PARAMS 5
@@ -150,18 +152,8 @@ static int wcd937x_handle_post_irq(void *data)
 
 static int wcd937x_init_reg(struct snd_soc_component *component)
 {
-	u32 val =0;
-	val = snd_soc_component_read32(component, WCD937X_DIGITAL_EFUSE_REG_29)
-	     & 0x0F;
-	if (snd_soc_component_read32(component, WCD937X_DIGITAL_EFUSE_REG_16)
-	    == 0x02 || snd_soc_component_read32(component,
-	    WCD937X_DIGITAL_EFUSE_REG_17) > 0x09) {
-		snd_soc_component_update_bits(component, WCD937X_SLEEP_CTL,
-				0x0E, val);
-	} else {
-		snd_soc_component_update_bits(component, WCD937X_SLEEP_CTL,
+	snd_soc_component_update_bits(component, WCD937X_SLEEP_CTL,
 				0x0E, 0x0E);
-	}
 	snd_soc_component_update_bits(component, WCD937X_SLEEP_CTL,
 				0x80, 0x80);
 	usleep_range(1000, 1010);
@@ -188,22 +180,19 @@ static int wcd937x_init_reg(struct snd_soc_component *component)
 				0xFF, 0xFA);
 	snd_soc_component_update_bits(component, WCD937X_MICB3_TEST_CTL_1,
 				0xFF, 0xFA);
-	/* Set Bandgap Fine Adjustment to +5mV for Tanggu SMIC part */
+#ifdef OPLUS_ARCH_EXTENDS
+        snd_soc_component_update_bits(component, WCD937X_MICB1_TEST_CTL_2,
+                                0x38, 0x00);
+        snd_soc_component_update_bits(component, WCD937X_MICB2_TEST_CTL_2,
+                                0x38, 0x00);
+        snd_soc_component_update_bits(component, WCD937X_MICB3_TEST_CTL_2,
+                                0x38, 0x00);
+        /* Set Bandgap Fine Adjustment to +5mV for Tanggu SMIC part */
 	if (snd_soc_component_read32(component, WCD937X_DIGITAL_EFUSE_REG_16)
-	    == 0x01) {
+	    == 0x01)
 		snd_soc_component_update_bits(component,
 				WCD937X_BIAS_VBG_FINE_ADJ, 0xF0, 0xB0);
-	} else if (snd_soc_component_read32(component,
-		WCD937X_DIGITAL_EFUSE_REG_16) == 0x02) {
-		snd_soc_component_update_bits(component,
-				WCD937X_HPH_NEW_INT_RDAC_HD2_CTL_L, 0x1F, 0x04);
-		snd_soc_component_update_bits(component,
-				WCD937X_HPH_NEW_INT_RDAC_HD2_CTL_R, 0x1F, 0x04);
-		snd_soc_component_update_bits(component,
-				WCD937X_BIAS_VBG_FINE_ADJ, 0xF0, 0xB0);
-		snd_soc_component_update_bits(component,
-				WCD937X_RX_BIAS_HPH_LOWPOWER, 0xF0, 0x90);
-	}
+#endif /* OPLUS_ARCH_EXTENDS  */
 	return 0;
 }
 
@@ -1055,22 +1044,6 @@ static int wcd937x_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 			snd_soc_component_update_bits(component,
 					WCD937X_DIGITAL_PDM_WD_CTL0,
 					0x17, 0x00);
-		usleep_range(10000, 10010);
-		/* disable EAR CnP FSM */
-		snd_soc_component_update_bits(component,
-					WCD937X_EAR_EAR_EN_REG,
-					0x02, 0x00);
-		/* toggle EAR PA to let PA control registers take effect */
-		snd_soc_component_update_bits(component,
-					WCD937X_ANA_EAR,
-					0x80, 0x80);
-		snd_soc_component_update_bits(component,
-					WCD937X_ANA_EAR,
-					0x80, 0x00);
-		/* enable EAR CnP FSM */
-		snd_soc_component_update_bits(component,
-					WCD937X_EAR_EAR_EN_REG,
-					0x02, 0x02);
 		break;
 	};
 	return ret;
@@ -1901,6 +1874,45 @@ static int wcd937x_tx_ch_pwr_level_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+
+#ifdef OPLUS_ARCH_EXTENDS
+static const char * const wcd_reg_dump_text[] = {
+	"ALL",
+};
+
+static SOC_ENUM_SINGLE_EXT_DECL(wcd_reg_dump_enum,
+				wcd_reg_dump_text);
+static int wcd_reg_dump_set(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	int i = 0;
+	u32 reg = 0;
+	struct snd_soc_component *component = NULL;
+	struct wcd937x_priv *wcd937x = NULL;
+
+	if (!kcontrol) {
+		return -1;
+	}
+	component = snd_soc_kcontrol_component(kcontrol);
+
+	if (!component) {
+		return -1;
+	}
+	wcd937x = snd_soc_component_get_drvdata(component);
+
+	if (!wcd937x || !(wcd937x->regmap)) {
+		return -1;
+	}
+	dev_err(component->dev, "wcd_reg_dump");
+	for (i = WCD937X_BASE_ADDRESS + 1; i <= wcd937x_regmap_config.max_register; i++) {
+		regmap_read(wcd937x->regmap, i, &reg);
+		dev_err(component->dev, "%04x:%04x\n", i, reg);
+	}
+	dev_err(component->dev, "wcd_reg_dump end");
+	return 0;
+}
+#endif
+
 static int wcd937x_ear_pa_gain_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -2210,6 +2222,10 @@ static const struct snd_kcontrol_new wcd937x_snd_controls[] = {
 		wcd937x_tx_ch_pwr_level_get, wcd937x_tx_ch_pwr_level_put),
 	SOC_ENUM_EXT("TX CH3 PWR", wcd937x_tx_ch_pwr_level_enum,
 		wcd937x_tx_ch_pwr_level_get, wcd937x_tx_ch_pwr_level_put),
+	#ifdef OPLUS_ARCH_EXTENDS
+	SOC_ENUM_EXT("WCD REG DUMP", wcd_reg_dump_enum,
+		NULL, wcd_reg_dump_set),
+	#endif
 };
 
 static const struct snd_kcontrol_new adc1_switch[] = {
@@ -2663,30 +2679,6 @@ static ssize_t wcd937x_variant_read(struct snd_info_entry *entry,
 static struct snd_info_entry_ops wcd937x_variant_ops = {
 	.read = wcd937x_variant_read,
 };
-
-/*
- * wcd937x_get_codec_variant
- * @component: component instance
- *
- * Return: codec variant or -EINVAL in error.
- */
-int wcd937x_get_codec_variant(struct snd_soc_component *component)
-{
-	struct wcd937x_priv *priv = NULL;
-
-	if (!component)
-		return -EINVAL;
-
-	priv = snd_soc_component_get_drvdata(component);
-	if (!priv) {
-		dev_err(component->dev,
-			"%s:wcd937x not probed\n", __func__);
-		return -EINVAL;
-	}
-
-	return priv->variant;
-}
-EXPORT_SYMBOL(wcd937x_get_codec_variant);
 
 /*
  * wcd937x_info_create_codec_entry - creates wcd937x module
@@ -3254,13 +3246,22 @@ static int wcd937x_bind(struct device *dev)
 	 * soundwire auto enumeration of slave devices as
 	 * as per HW requirement.
 	 */
+#ifdef OPLUS_BUG_STABILITY
+	dev_info(dev, "%s: delay bind wcd\n", __func__);
+	usleep_range(10000, 10010);
+#else /* OPLUS_BUG_STABILITY */
 	usleep_range(5000, 5010);
+#endif /* OPLUS_BUG_STABILITY */
 	wcd937x->wakeup = wcd937x_wakeup;
 
 	ret = component_bind_all(dev, wcd937x);
 	if (ret) {
 		dev_err(dev, "%s: Slave bind failed, ret = %d\n",
 			__func__, ret);
+#ifdef OPLUS_BUG_STABILITY
+		dev_err(dev, "%s: trigger panic\n", __func__);
+		panic("%s: panic for 1068440", __func__);
+#endif /* OPLUS_BUG_STABILITY */
 		goto err_bind_all;
 	}
 
